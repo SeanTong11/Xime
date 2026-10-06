@@ -906,22 +906,28 @@ object KeysConfigHelper {
     /** 从 xime.yaml + xime.custom.yaml 合并解析键盘手势配置。 */
     private fun parseKeyboardFromAssets(context: Context): Pair<Map<String, KeyBinding>, Map<String, KeyBinding>>? {
         val defaultText = readAssetText(context, XIME_CONFIG_FILE) ?: return null
-        val defaultPresets = parseKeyboardActionsYamlText(defaultText)
-        val defaultZh = parseKeyboardYamlSection(defaultText, "qwerty", defaultPresets) ?: return null
-        val defaultEn = parseKeyboardYamlSection(defaultText, "qwerty_en", defaultPresets) ?: emptyMap()
         // 支持两种来源：files/rime/（浏览器导入）或 assets/（内置），自动 fallback
         val userData = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
         val customText = userData ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        return parseKeyboardGestureTexts(defaultText, customText)
+    }
+
+    /**
+     * 纯文本合并解析键盘手势配置（default = xime.yaml，custom = xime.custom.yaml）。
+     *
+     * 预设合并为 default + custom（同名 custom 覆盖），合并结果供 custom keys 的
+     * `{ use: }` 引用；keys 按键级合并（custom 同名键整体覆盖 default 键）。
+     */
+    internal fun parseKeyboardGestureTexts(
+        defaultText: String,
+        customText: String?,
+    ): Pair<Map<String, KeyBinding>, Map<String, KeyBinding>>? {
+        val defaultPresets = parseKeyboardActionsYamlText(defaultText)
+        val defaultZh = parseKeyboardYamlSection(defaultText, "qwerty", defaultPresets) ?: return null
+        val defaultEn = parseKeyboardYamlSection(defaultText, "qwerty_en", defaultPresets) ?: emptyMap()
         val presets = defaultPresets + (customText?.let { parseKeyboardActionsYamlText(it) } ?: emptyMap())
-        val customZh: Map<String, KeyBinding>?
-        val customEn: Map<String, KeyBinding>?
-        if (customText != null) {
-            customZh = parseKeyboardYamlSection(customText, "qwerty", presets)
-            customEn = parseKeyboardYamlSection(customText, "qwerty_en", presets)
-        } else {
-            customZh = null
-            customEn = null
-        }
+        val customZh: Map<String, KeyBinding>? = customText?.let { parseKeyboardYamlSection(it, "qwerty", presets) }
+        val customEn: Map<String, KeyBinding>? = customText?.let { parseKeyboardYamlSection(it, "qwerty_en", presets) }
         val zh = if (customZh != null) defaultZh + customZh else defaultZh
         val en = if (customEn != null) defaultEn + customEn else defaultEn
         return Pair(zh, en)
@@ -1295,10 +1301,15 @@ object KeysConfigHelper {
     /** 从 xime.yaml + xime.custom.yaml 合并解析按键布局模式（中英文分开）。 */
     private fun parseButtonLayoutFromAssets(context: Context): Pair<ButtonLayout, ButtonLayout> {
         val defaultText = readAssetText(context, XIME_CONFIG_FILE) ?: return Pair(ButtonLayout.STANDARD, ButtonLayout.STANDARD)
-        val defaultZh = parseButtonLayoutYamlText(defaultText, "qwerty")
-        val defaultEn = parseButtonLayoutYamlText(defaultText, "qwerty_en")
         val customText = readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
             ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
+        return parseButtonLayoutTexts(defaultText, customText)
+    }
+
+    /** 纯文本合并解析按键布局：custom 段级覆盖 default，中英文独立，缺省回退 STANDARD。 */
+    internal fun parseButtonLayoutTexts(defaultText: String, customText: String?): Pair<ButtonLayout, ButtonLayout> {
+        val defaultZh = parseButtonLayoutYamlText(defaultText, "qwerty")
+        val defaultEn = parseButtonLayoutYamlText(defaultText, "qwerty_en")
         val customZh = customText?.let { parseButtonLayoutYamlText(it, "qwerty") }
         val customEn = customText?.let { parseButtonLayoutYamlText(it, "qwerty_en") }
         val result = Pair(
