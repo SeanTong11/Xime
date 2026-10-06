@@ -492,7 +492,7 @@ keyboard:
       mode_change: { width: 1.2, tap: { action: command, value: mode_change }, long_press: { display: bubble, values: [ { label: number, action: command, value: mode_change_number }, { label: common_symbol, action: command, value: mode_change_common_symbol } ] } }
       # 空格键：单击上屏空格；长按进入语音输入（含麦克风权限校验）
       # 长按若想改为「重复空格」：long_press: { values: [ { action: repeat_space, value: 5 } ] }
-      space: { width: 3, tap: { action: space }, long_press: { values: [ { action: voice } ] } }
+      space: { width: 3, tap: { action: space }, long_press: { values: [ { label: "语音", action: voice } ] } }
       # 回车键
       enter: { width: 1.2, tap: { action: enter } }
       #  逗号键，label 为中文显示，value 为英文显示+提交值
@@ -553,7 +553,7 @@ keyboard:
       mode_change: { width: 1.2, tap: { action: command, value: mode_change }, long_press: { display: bubble, values: [ { label: number, action: command, value: mode_change_number }, { label: common_symbol, action: command, value: mode_change_common_symbol } ] } }
       # 空格键：单击上屏空格；长按进入语音输入（含麦克风权限校验）
       # 长按若想改为「重复空格」：long_press: { values: [ { action: repeat_space, value: 5 } ] }
-      space: { width: 3, tap: { action: space }, long_press: { values: [ { action: voice } ] } }
+      space: { width: 3, tap: { action: space }, long_press: { values: [ { label: "语音", action: voice } ] } }
       # 回车键
       enter: { width: 1.2, tap: { action: enter } }
       #  逗号键，label 为中文显示，value 为英文显示+提交值
