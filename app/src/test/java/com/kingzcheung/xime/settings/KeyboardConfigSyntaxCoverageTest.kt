@@ -253,6 +253,55 @@ class KeyboardConfigSyntaxCoverageTest {
         assertEquals(ButtonLayout.STANDARD, en)
     }
 
+    @Test
+    fun `button_layout 合并键段可独立配置`() {
+        // 自定义合并键段（由 schemas 绑定发现）的 button_layout 现已生效
+        val text = """
+            keyboard:
+              qwerty: { button_layout: compact }
+              qwerty_30:
+                schemas: [my_dvorak]
+                button_layout: standard
+        """.trimIndent()
+        assertEquals(ButtonLayout.STANDARD, KeysConfigHelper.parseButtonLayoutYamlText(text, "qwerty_30"))
+    }
+
+    @Test
+    fun `button_layout 合并键段未配置返回 null 回退全局值`() {
+        val text = """
+            keyboard:
+              qwerty: { button_layout: compact }
+              qwerty_30:
+                schemas: [my_dvorak]
+        """.trimIndent()
+        assertNull(KeysConfigHelper.parseButtonLayoutYamlText(text, "qwerty_30"))
+    }
+
+    @Test
+    fun `resolveButtonLayout 段配置优先且英文态恒用全局值`() {
+        val sectionLayouts = mapOf("qwerty_30" to ButtonLayout.COMPACT)
+        // 中文态 + 活动段已配置 → 段值优先
+        assertEquals(
+            ButtonLayout.COMPACT,
+            KeysConfigHelper.resolveButtonLayout(false, "qwerty_30", sectionLayouts, ButtonLayout.STANDARD, ButtonLayout.STANDARD),
+        )
+        // 中文态 + 活动段未配置 → 回退中文全局值
+        assertEquals(
+            ButtonLayout.STANDARD,
+            KeysConfigHelper.resolveButtonLayout(false, "qwerty_17", sectionLayouts, ButtonLayout.STANDARD, ButtonLayout.STANDARD),
+        )
+        // 英文态 → 恒用英文全局值（合并键段与行布局同语义，仅中文态生效）
+        assertEquals(
+            ButtonLayout.STANDARD,
+            KeysConfigHelper.resolveButtonLayout(true, "qwerty_30", sectionLayouts, ButtonLayout.COMPACT, ButtonLayout.STANDARD),
+        )
+        // 无活动合并段 → 全局值
+        assertEquals(
+            ButtonLayout.STANDARD,
+            KeysConfigHelper.resolveButtonLayout(false, null, sectionLayouts, ButtonLayout.STANDARD, ButtonLayout.COMPACT),
+        )
+    }
+
     // ═══ 3. 内置资产冒烟 ═══
 
     @Test
@@ -318,6 +367,61 @@ class KeyboardConfigSyntaxCoverageTest {
         val binding = KeysConfigHelper.parseKeyboardYamlSection(text, "qwerty")!!["z"]!!
         assertEquals(GestureAction.SEND_RIME, binding.tap!!.action)
         assertEquals("z", binding.tap!!.value)
+    }
+
+    // ═══ 6. 段类型 type 声明 ═══
+
+    @Test
+    fun `type 声明优先于段名推断且可解救撞保留名的全键盘段`() {
+        val text = """
+            keyboard:
+              t9:
+                type: full
+                schemas: [some_full_schema]
+                layout:
+                  rows:
+                    - [q, w, e]
+        """.trimIndent()
+        val types = KeysConfigHelper.parseSectionTypesYamlText(text)
+        assertEquals("full", KeysConfigHelper.sectionKindOf("t9", types))
+        val bindings = KeysConfigHelper.parseSchemaBindingsYamlText(text)
+        // 段名撞了保留名，但显式 type: full 使其作为全键盘进入合并键解析
+        assertEquals("t9", KeysConfigHelper.resolveMergedSection("some_full_schema", bindings, types))
+    }
+
+    @Test
+    fun `type t9 使任意段名成为九键代码布局`() {
+        val text = """
+            keyboard:
+              my_t9:
+                type: t9
+                schemas: [my_9key]
+        """.trimIndent()
+        val types = KeysConfigHelper.parseSectionTypesYamlText(text)
+        val bindings = KeysConfigHelper.parseSchemaBindingsYamlText(text)
+        assertEquals("t9", KeysConfigHelper.sectionKindOf("my_t9", types))
+        // 代码布局段不进入合并键行布局解析
+        assertNull(KeysConfigHelper.resolveMergedSection("my_9key", bindings, types))
+    }
+
+    @Test
+    fun `未声明 type 时按段名推断`() {
+        assertEquals("t9", KeysConfigHelper.sectionKindOf("t9", emptyMap()))
+        assertEquals("stroke", KeysConfigHelper.sectionKindOf("stroke", emptyMap()))
+        assertEquals("handwriting", KeysConfigHelper.sectionKindOf("handwriting", emptyMap()))
+        assertEquals("full", KeysConfigHelper.sectionKindOf("qwerty_30", emptyMap()))
+    }
+
+    @Test
+    fun `未知 type 回退按段名推断`() {
+        val text = """
+            keyboard:
+              my_kb:
+                type: nine_key
+        """.trimIndent()
+        val types = KeysConfigHelper.parseSectionTypesYamlText(text)
+        assertTrue("未知 type 不产生声明", types.isEmpty())
+        assertEquals("full", KeysConfigHelper.sectionKindOf("my_kb", types))
     }
 
     // ═══ 5. docs/config_examples 示例完整性 ═══
