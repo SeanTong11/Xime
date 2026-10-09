@@ -143,19 +143,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // composing 快照 → 插件（input_changed 事件；T9 与候选栏同源显示态）
         service.pluginEvents.dispatchInputChanged(if (isT9Schema) displayText else inputText)
 
-        if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.supportsEnglishCandidateReplace()) {
-            service.serviceScope.launch {
-                val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
-                withContext(Dispatchers.Main) {
-                    val current = service.candidateState.value
-                    // 在途联想过期校验：pendingEnglish 已变/已清（如点击候选栏"清空"）→
-                    // 丢弃迟到回填，防止"清了又冒出来"与旧联想覆盖新联想的竞态
-                    if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
-                    }
-                }
-            }
-        }
+        service.requestEnglishAssociations(pendingEnglish)
 
         if (codeInInputBox && !service.uiState.value.toolPanelInputFocused) {
             val ic = service.currentInputConnection
@@ -312,18 +300,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // composing 快照 → 插件（input_changed 事件；空编码表示本轮输入结束）
         service.pluginEvents.dispatchInputChanged(if (isT9Schema) displayText else result.inputText)
 
-        if (pendingEnglish.isNotEmpty() && !service.isSecretEditor() && service.supportsEnglishCandidateReplace()) {
-            service.serviceScope.launch {
-                val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
-                withContext(Dispatchers.Main) {
-                    val current = service.candidateState.value
-                    // 在途联想过期校验：pendingEnglish 已变/已清 → 丢弃迟到回填
-                    if (current.pendingEnglishText == pendingEnglish) {
-                        service.candidateState.value = current.copy(associationCandidates = candidates)
-                    }
-                }
-            }
-        }
+        service.requestEnglishAssociations(pendingEnglish)
 
         if (SettingsPreferences.getInputTextLocation(service) == SettingsPreferences.INPUT_TEXT_INPUT_BOX) {
             val ic = service.currentInputConnection
@@ -421,23 +398,40 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     /** 菜单栏方案开关点击：切换引擎选项并刷新状态。 */
     internal fun toggleSchemaSwitch(sw: com.kingzcheung.xime.viewmodel.SchemaSwitchUiState) {
         service.serviceScope.launch(service.keyProcessingDispatcher) {
-            if (sw.name == "ascii_mode") {
-                // 菜单中西切换 = 用户显式操作（USER_TOGGLE，会话级，不持久化）
+            val succeeded = if (sw.name == "ascii_mode") {
                 service.asciiModeController.switchAscii(AsciiModeController.Reason.USER_TOGGLE)
             } else if (sw.name.isNotEmpty()) {
                 val newValue = !service.rimeEngine.getOption(sw.name)
                 service.rimeEngine.setOption(sw.name, newValue)
-                persistSchemaOption(sw.name, newValue)
+                val applied = service.rimeEngine.getOption(sw.name) == newValue
+                if (applied) persistSchemaOption(sw.name, newValue)
                 service.updateUI()
+                applied
             } else if (sw.options.isNotEmpty()) {
-                val nextIndex = (sw.currentIndex + 1) % sw.options.size
+                val active = sw.options.indexOfFirst { service.rimeEngine.getOption(it) }
+                val nextIndex = (active.coerceAtLeast(0) + 1) % sw.options.size
                 sw.options.forEachIndexed { i, opt ->
                     service.rimeEngine.setOption(opt, i == nextIndex)
-                    persistSchemaOption(opt, i == nextIndex)
                 }
+                val applied = sw.options.withIndex().all { (i, opt) ->
+                    service.rimeEngine.getOption(opt) == (i == nextIndex)
+                }
+                if (applied) sw.options.forEachIndexed { i, opt -> persistSchemaOption(opt, i == nextIndex) }
                 service.updateUI()
+                applied
+            } else false
+            val switches = loadSchemaSwitches(service.rimeEngine.getCurrentSchema())
+            val current = switches.firstOrNull { it.name == sw.name && it.options == sw.options }
+            withContext(Dispatchers.Main) {
+                service.uiState.value = service.uiState.value.copy(schemaSwitches = switches)
+                val message = if (succeeded && current != null) {
+                    val display = com.kingzcheung.xime.keyboard.schemaSwitchPresentation(
+                        current.name, current.states, current.abbrev, current.currentIndex
+                    )
+                    "已切换为${display.label}"
+                } else "切换失败，请稍后再试"
+                android.widget.Toast.makeText(service, message, android.widget.Toast.LENGTH_SHORT).show()
             }
-            refreshSchemaSwitches()
         }
     }
 

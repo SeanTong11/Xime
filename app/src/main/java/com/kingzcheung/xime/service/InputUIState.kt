@@ -10,6 +10,7 @@ import com.kingzcheung.xime.viewmodel.SchemaSwitchUiState
 
 data class InputUIState(
     val isAsciiMode: Boolean = false,
+    val englishCompletionEnabled: Boolean = true,
     val schemaName: String = "",
     val currentSchemaId: String = "",
     val schemas: List<SchemaInfo> = emptyList(),

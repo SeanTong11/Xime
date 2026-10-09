@@ -22,6 +22,17 @@ class SettingsPreferencesTest {
     }
 
     @Test
+    fun englishCompletionDefaultsToWordsAndPersistsIndependently() {
+        assertTrue(SettingsPreferences.isEnglishCompletionEnabled(context))
+        SettingsPreferences.setEnglishCompletionEnabled(context, false)
+        assertFalse(SettingsPreferences.isEnglishCompletionEnabled(context))
+        SettingsPreferences.setSmartPredictionEnabled(context, true)
+        assertFalse(SettingsPreferences.isEnglishCompletionEnabled(context))
+        SettingsPreferences.setEnglishCompletionEnabled(context, true)
+        assertTrue(SettingsPreferences.isEnglishCompletionEnabled(context))
+    }
+
+    @Test
     fun currentSchemaUsesDefaultThenMigratesLegacy() {
         // 引擎未初始化（测试环境）且无历史数据时使用默认方案
         assertEquals("wubi86", SettingsPreferences.getCurrentSchema(context))

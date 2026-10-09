@@ -42,17 +42,21 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.viewmodel.SchemaSwitchUiState
+import com.kingzcheung.xime.keyboard.schemaSwitchPresentation
 
 data class MenuItem(
     val icon: Painter? = null,
     val label: String,
     val action: () -> Unit,
     val textIcon: String? = null,
+    val currentState: String? = null,
 )
 
 data class MenuBarState(
@@ -64,6 +68,7 @@ data class MenuBarState(
     val keyTextColor: Color = Color(0xFF202124),
     val isFloatingMode: Boolean = false,
     val schemaSwitches: List<SchemaSwitchUiState> = emptyList(),
+    val englishCompletionEnabled: Boolean = true,
 )
 
 data class MenuBarCallbacks(
@@ -79,6 +84,7 @@ data class MenuBarCallbacks(
     val onFloatingModeToggle: (() -> Unit)? = null,
     val onToolbarCustomize: () -> Unit = {},
     val onToggleSchemaSwitch: ((SchemaSwitchUiState) -> Unit)? = null,
+    val onToggleEnglishCompletion: () -> Unit = {},
 )
 
 @Composable
@@ -125,21 +131,24 @@ fun MenuBar(
     val floatingLabel = if (state.isFloatingMode) "退出悬浮" else "悬浮模式"
     val floatingAction = callbacks.onFloatingModeToggle ?: {}
 
-    // 动态方案开关：图标取第一个状态的首字；标题若有 abbrev 则用 abbrev（多个用 🔁 连接），否则用所有状态 🔁 连接
+    // 显示当前状态，避免静态图标和拼接标签掩盖切换结果。
     val switchItems = state.schemaSwitches.map { sw ->
-        val textIcon = sw.states.firstOrNull()?.firstOrNull()?.toString() ?: ""
-        val label = if (sw.abbrev.isNotEmpty()) sw.abbrev.joinToString("🔁")
-            else sw.states.joinToString("🔁")
-        MenuItem(icon = null, label = label, action = { callbacks.onToggleSchemaSwitch?.invoke(sw) }, textIcon = textIcon)
+        val display = schemaSwitchPresentation(sw.name, sw.states, sw.abbrev, sw.currentIndex)
+        MenuItem(label = display.label, action = { callbacks.onToggleSchemaSwitch?.invoke(sw) },
+            textIcon = display.textIcon, currentState = display.label)
     }
 
-    val menuItems = remember(darkModeIcon, darkModeLabel, state.isFloatingMode, state.schemaSwitches) {
+    val menuItems = remember(darkModeIcon, darkModeLabel, state.isFloatingMode, state.schemaSwitches, state.englishCompletionEnabled) {
         listOf(
             MenuItem(clipboardIcon, "剪贴板", callbacks.onClipboard),
             MenuItem(quickSendIcon, "快捷发送", callbacks.onQuickSend),
             MenuItem(schemaIcon, "输入方案", callbacks.onSchemaList),
             MenuItem(emojiIcon, "表情", callbacks.onEmoji),
         ) + switchItems + listOf(
+            MenuItem(label = if (state.englishCompletionEnabled) "英文单词补全" else "纯英文直输",
+                action = callbacks.onToggleEnglishCompletion,
+                textIcon = if (state.englishCompletionEnabled) "abc" else "A",
+                currentState = if (state.englishCompletionEnabled) "英文单词补全" else "纯英文直输"),
             MenuItem(customizeIcon, "定制工具栏", callbacks.onToolbarCustomize),
             // 悬浮模式下键盘内容为缩放的浮动卡片，高度不可调节，隐藏该入口
             if (!state.isFloatingMode) MenuItem(keyboardResizeIcon, "键盘调节", callbacks.onKeyboardResize) else null,
@@ -294,6 +303,7 @@ fun MenuItemButton(
             .then(if (isLandscape) Modifier.height(72.dp) else Modifier.aspectRatio(1f))
             .clip(RoundedCornerShape(12.dp))
             .background(bgColor)
+            .semantics { item.currentState?.let { stateDescription = "当前：$it" } }
             .clickable { item.action() }
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,

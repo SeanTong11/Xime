@@ -497,6 +497,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             SettingsPreferences.setFloatingOffsetY(this, clampedY, isLandscape)
         }
         uiState.value = uiState.value.copy(
+            englishCompletionEnabled = SettingsPreferences.isEnglishCompletionEnabled(this),
             darkMode = SettingsPreferences.getDarkMode(this),
             themeId = SettingsPreferences.getKeyboardTheme(this),
             isSttEnabled = SettingsPreferences.isSttEnabled(this@XimeInputMethodService),
@@ -511,6 +512,29 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         )
     }
     
+    private val englishCompletionRequests = EnglishCompletionRequests()
+
+    /** 英文输入、退格、Rime 刷新共用此入口，避免旧结果在模式切换后回填。 */
+    internal fun requestEnglishAssociations(prefix: String) {
+        if (prefix.isEmpty() || !SettingsPreferences.isEnglishCompletionEnabled(this) ||
+            isSecretEditor() || !supportsEnglishCandidateReplace()) return
+        val request = englishCompletionRequests.capture()
+        val sessionId = uiState.value.inputSessionId
+        serviceScope.launch {
+            val candidates = predictionManager.getEnglishAssociations(prefix, PredictionManager.MAX_ASSOCIATION_COUNT)
+            withContext(Dispatchers.Main) {
+                val current = candidateState.value
+                if (uiState.value.inputSessionId == sessionId &&
+                    englishCompletionRequests.isCurrent(request) &&
+                    SettingsPreferences.isEnglishCompletionEnabled(this@XimeInputMethodService) &&
+                    !isSecretEditor() && supportsEnglishCandidateReplace() &&
+                    current.pendingEnglishText == prefix) {
+                    candidateState.value = current.copy(associationCandidates = candidates)
+                }
+            }
+        }
+    }
+
     private fun registerSharedPrefsListener() {
         val prefs = SettingsPreferences.getPrefsPublic(this)
         sharedPrefsListener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -532,6 +556,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     // 且下一会话开始时 OfflineAsrBackend 会重新同步设置
                     if (SettingsPreferences.isSttKeepEngineAlive(this@XimeInputMethodService)) {
                         Thread { AsrBackendFactory.warmup(this@XimeInputMethodService) }.start()
+                    }
+                }
+                SettingsPreferences.KEY_ENGLISH_COMPLETION_ENABLED -> {
+                    englishCompletionRequests.invalidate()
+                    uiState.value = uiState.value.copy(
+                        englishCompletionEnabled = SettingsPreferences.isEnglishCompletionEnabled(this)
+                    )
+                    if (uiState.value.isAsciiMode || candidateState.value.pendingEnglishText.isNotEmpty()) {
+                        // 字母已逐字上屏，只清补全状态，不能重复提交或删除屏上文字。
+                        candidateState.value = candidateState.value.copy(
+                            pendingEnglishText = "", associationCandidates = emptyList()
+                        )
+                        maybeCollapseCandidatePage()
                     }
                 }
                 SettingsPreferences.KEY_SMART_PREDICTION_ENABLED -> onPredictionSettingChanged()
@@ -1610,6 +1647,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             ) {
                                 KeyboardUiState(
                                     isAsciiMode = state.isAsciiMode,
+                                    englishCompletionEnabled = state.englishCompletionEnabled,
                                     schemaName = state.schemaName,
                                     currentSchemaId = state.currentSchemaId,
                                     schemas = state.schemas,

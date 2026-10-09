@@ -190,6 +190,32 @@ fun SmartPredictionSettingsContent(
                 })
             }
 
+            item {
+                var englishCompletionEnabled by remember {
+                    mutableStateOf(SettingsPreferences.isEnglishCompletionEnabled(context))
+                }
+                SettingsSection(title = "英文输入", content = {
+                    AssociationModeRow(
+                        title = "纯英文直输",
+                        subtitle = "按键直接输入字符，不显示单词补全",
+                        isSelected = !englishCompletionEnabled,
+                        onClick = {
+                            englishCompletionEnabled = false
+                            SettingsPreferences.setEnglishCompletionEnabled(context, false)
+                        }
+                    )
+                    AssociationModeRow(
+                        title = "单词补全",
+                        subtitle = "输入字母时显示单词候选，点击候选替换当前单词",
+                        isSelected = englishCompletionEnabled,
+                        onClick = {
+                            englishCompletionEnabled = true
+                            SettingsPreferences.setEnglishCompletionEnabled(context, true)
+                        }
+                    )
+                })
+            }
+
             if (uiState.isEnabled) {
                 item {
                     var spaceCommitEnabled by remember {

@@ -56,7 +56,8 @@ internal fun rememberImeKeyboardCallbacks(
             onCandidateDelete = { index ->
                 service.keyRouter.deleteCandidate(index)
             },
-            onAssociationSelect = { index ->
+            onAssociationSelect = associationSelect@ { index ->
+                if (service.uiState.value.isAsciiMode && !SettingsPreferences.isEnglishCompletionEnabled(service)) return@associationSelect
                 service.feedbackManager.performKeyPressEffect(view = view)
                 val cs = service.candidateState.value
                 val adjustedCandidates = if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
@@ -117,6 +118,13 @@ internal fun rememberImeKeyboardCallbacks(
                 )
             },
             onToggleDarkMode = { service.toggleDarkMode() },
+            onToggleEnglishCompletion = {
+                val enabled = !SettingsPreferences.isEnglishCompletionEnabled(service)
+                SettingsPreferences.setEnglishCompletionEnabled(service, enabled)
+                android.widget.Toast.makeText(service,
+                    if (enabled) "已切换为英文单词补全" else "已切换为纯英文直输",
+                    android.widget.Toast.LENGTH_SHORT).show()
+            },
             onClipboard = {},
             onClipboardSelect = { text -> service.textCommit.selectClipboardItem(text) },
             onClipboardImageSelect = { item -> service.textCommit.selectClipboardImage(item) },

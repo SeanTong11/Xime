@@ -25,6 +25,16 @@ object SettingsPreferences {
     private const val KEY_VIBRATION_INTENSITY = "vibration_intensity"
     private const val KEY_KEYBOARD_THEME = "keyboard_theme"
     
+    const val KEY_ENGLISH_COMPLETION_ENABLED = "english_completion_enabled"
+
+    /** 英文单词补全独立于中文 AI 联想，默认开启以保留已有行为。 */
+    fun isEnglishCompletionEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_ENGLISH_COMPLETION_ENABLED, true)
+
+    fun setEnglishCompletionEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_ENGLISH_COMPLETION_ENABLED, enabled).apply()
+    }
+
     const val KEY_SMART_PREDICTION_ENABLED = "smart_prediction_enabled"
     private const val KEY_PREDICTION_MODEL_REPO = "prediction_model_repo"
     private const val KEY_PREDICTION_SELECTED_MODEL = "prediction_selected_model"

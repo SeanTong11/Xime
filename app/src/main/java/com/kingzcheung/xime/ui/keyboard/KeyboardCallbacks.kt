@@ -24,6 +24,7 @@ data class KeyboardCallbacks(
     val onAssociationSelect: ((Int) -> Unit)? = null,
     val onClearAssociation: (() -> Unit)? = null,
     val onToggleDarkMode: (() -> Unit)? = null,
+    val onToggleEnglishCompletion: (() -> Unit)? = null,
     val onClipboard: (() -> Unit)? = null,
     val onClipboardSelect: ((String) -> Unit)? = null,
     /**

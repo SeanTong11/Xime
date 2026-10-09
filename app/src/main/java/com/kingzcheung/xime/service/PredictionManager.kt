@@ -167,6 +167,7 @@ class PredictionManager(
     }
     
     suspend fun getEnglishAssociations(text: String, limit: Int = MAX_ASSOCIATION_COUNT): List<String> {
+        if (!SettingsPreferences.isEnglishCompletionEnabled(context)) return emptyList()
         return try {
             AssociationService.getAssociations(context, text, true, limit)
         } catch (e: Exception) {

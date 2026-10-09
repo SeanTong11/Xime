@@ -48,6 +48,7 @@ data class SchemaSwitchUiState(
 
 data class KeyboardUiState(
     val isAsciiMode: Boolean = false,
+    val englishCompletionEnabled: Boolean = true,
     val schemaName: String = "",
     val currentSchemaId: String = "",
     val schemas: List<SchemaInfo> = emptyList(),

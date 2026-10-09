@@ -7,6 +7,12 @@ on:
       - dev*
   pull_request:
   workflow_dispatch:
+    inputs:
+      parallel_test_app:
+        description: '构建可与正式版共存的测试 APK'
+        type: boolean
+        default: true
+        required: false
 
 permissions:
   contents: read
@@ -116,7 +122,7 @@ jobs:
           retention-days: 7
           
       - name: Build Debug APKs
-        run: ./gradlew assembleDebug --no-daemon
+        run: ./gradlew assembleDebug --no-daemon -PximeTestBuild=${{ github.event_name != 'workflow_dispatch' || inputs.parallel_test_app }}
 
       - name: Build Plugin XIPKs
         run: bash scripts/build-plugins.sh

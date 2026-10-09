@@ -590,13 +590,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 } else {
                                     val committed = result.committedText
                                     if (state.isAsciiMode && committed.isNotEmpty() && result.inputText.isEmpty() && result.candidates.isEmpty()) {
-                                        val current = candState.pendingEnglishText
-                                        val newPending = current + committed
-                                        service.candidateState.value = service.candidateState.value.copy(pendingEnglishText = newPending)
-                                        // 直接上屏模式：只提交 Rime 返回的增量字符（如智能引号转换结果），
-                                        // 整段 pending 对应的文本已逐字上屏，不可重复提交。
+                                        // 只提交本次增量；与模式切换在主线程更新补全状态，避免清空后被旧快照回写。
                                         withContext(Dispatchers.Main) {
+                                            val current = service.candidateState.value
                                             service.commitText(committed)
+                                            service.candidateState.value = service.candidateState.value.copy(
+                                                pendingEnglishText = if (SettingsPreferences.isEnglishCompletionEnabled(service))
+                                                    current.pendingEnglishText + committed else ""
+                                            )
                                         }
                                         sendTransformedResult(result) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     } else {
@@ -611,18 +612,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                 if (!candState.isComposing || isShiftedChinese) {
                                                     if (isAscii) {
                                                         val charToCommit = if (isShifted) char.uppercase() else char.lowercase()
-                                                        val currentPending = candState.pendingEnglishText
-                                                        val newPending = currentPending + charToCommit
-                                                        // 英文直接上屏模式：字符不经 composing region，即输即落盘；
-                                                        // pendingEnglishText 仅作编码记录（供联想与选中候选后回删替换校验）。
+                                                        // 字符即输即落盘；纯英文不积累用于补全替换的前缀。
                                                         withContext(Dispatchers.Main) {
+                                                            val current = service.candidateState.value
                                                             service.commitText(charToCommit)
+                                                            service.candidateState.value = service.candidateState.value.copy(
+                                                                pendingEnglishText = if (SettingsPreferences.isEnglishCompletionEnabled(service))
+                                                                    current.pendingEnglishText + charToCommit else "",
+                                                                associationCandidates = emptyList(),
+                                                                englishReplaceSupported = service.supportsEnglishCandidateReplace()
+                                                            )
                                                         }
-                                                        service.candidateState.value = service.candidateState.value.copy(
-                                                            pendingEnglishText = newPending,
-                                                            associationCandidates = emptyList(),
-                                                            englishReplaceSupported = service.supportsEnglishCandidateReplace()
-                                                        )
                                                         needsUIUpdate = true
                                     } else {
                                         committedText = char
@@ -705,18 +705,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             FileLogger.i(XimeInputMethodService.TAG, "keyRouter UI refresh: ascii ${service.uiState.value.isAsciiMode}->$capturedIsAscii")
                         }
                         service.uiState.value = service.uiState.value.copy(isAsciiMode = capturedIsAscii)
-                        if (pendingEnglish.isNotEmpty() && !secret && service.supportsEnglishCandidateReplace()) {
-                            service.serviceScope.launch {
-                                val candidates = service.predictionManager.getEnglishAssociations(pendingEnglish, PredictionManager.MAX_ASSOCIATION_COUNT)
-                                withContext(Dispatchers.Main) {
-                                    val current = service.candidateState.value
-                                    // 在途联想过期校验：pendingEnglish 已变/已清 → 丢弃迟到回填
-                                    if (current.pendingEnglishText == pendingEnglish) {
-                                        service.candidateState.value = current.copy(associationCandidates = candidates)
-                                    }
-                                }
-                            }
-                        }
+                        service.requestEnglishAssociations(pendingEnglish)
                         if (service.calculatorEngine.isActive()) {
                             updateCalculatorCandidates()
                         }
@@ -905,14 +894,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             candidateActions = emptyList()
                         )
                     }
-                    if (!service.isSecretEditor() && service.supportsEnglishCandidateReplace()) {
-                        service.serviceScope.launch {
-                            val candidates = service.predictionManager.getEnglishAssociations(newPending, PredictionManager.MAX_ASSOCIATION_COUNT)
-                            withContext(Dispatchers.Main) {
-                                service.candidateState.value = service.candidateState.value.copy(associationCandidates = candidates)
-                            }
-                        }
-                    }
+                    service.requestEnglishAssociations(newPending)
                 } else {
                     withContext(Dispatchers.Main) {
                         service.sendDownUpKeyEvents(KeyEvent.KEYCODE_DEL)

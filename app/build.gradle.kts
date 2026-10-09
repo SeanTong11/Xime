@@ -89,6 +89,14 @@ android {
     }
 
     buildTypes {
+        getByName("debug") {
+            // Actions 测试包可与正式版共存，使用独立数据目录。
+            if (providers.gradleProperty("ximeTestBuild").orNull == "true") {
+                applicationIdSuffix = ".debug"
+                versionNameSuffix = "-test"
+                resValue("string", "app_name", "曦码输入法（测试）")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true

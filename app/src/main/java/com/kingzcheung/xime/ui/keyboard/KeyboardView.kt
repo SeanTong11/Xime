@@ -347,7 +347,9 @@ fun KeyboardView(
                         inputText = cs.inputText,
                         preeditText = cs.preeditText,
                         isComposing = cs.isComposing,
-                        associationCandidates = if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
+                        associationCandidates = if (state.isAsciiMode && !state.englishCompletionEnabled) {
+                            emptyList()
+                        } else if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
                             listOf(cs.pendingEnglishText) + cs.associationCandidates
                         } else {
                             cs.associationCandidates
@@ -1373,7 +1375,10 @@ fun KeyboardView(
                             keyBgColor = keyBgColor,
                             keyTextColor = keyTextColor,
                             isFloatingMode = state.isFloatingMode,
-                            schemaSwitches = state.schemaSwitches,
+                            englishCompletionEnabled = state.englishCompletionEnabled,
+                            schemaSwitches = state.schemaSwitches.map { sw ->
+                                if (sw.name == "ascii_mode") sw.copy(currentIndex = if (state.isAsciiMode) 1 else 0) else sw
+                            },
                         ),
                         callbacks = MenuBarCallbacks(
                             onDismiss = { onHapticFeedback?.invoke(); viewModel.closeOverlay() },
@@ -1385,9 +1390,10 @@ fun KeyboardView(
                             onSettings = { onHapticFeedback?.invoke(); callbacks.onSettings?.invoke(); viewModel.closeOverlay() },
                             onSchemaList = { onHapticFeedback?.invoke(); viewModel.pushOverlay(OverlayRoute.SchemaList) },
                             onToggleDarkMode = { onHapticFeedback?.invoke(); callbacks.onToggleDarkMode?.invoke() },
+                            onToggleEnglishCompletion = { onHapticFeedback?.invoke(); callbacks.onToggleEnglishCompletion?.invoke() },
                             onToolbarCustomize = { onHapticFeedback?.invoke(); viewModel.showOverlay(OverlayRoute.ToolbarCustomize) },
                             onFloatingModeToggle = { onHapticFeedback?.invoke(); callbacks.onFloatingModeChange?.invoke(!state.isFloatingMode); viewModel.closeOverlay() },
-                            onToggleSchemaSwitch = { sw -> onHapticFeedback?.invoke(); callbacks.onToggleSchemaSwitch?.invoke(sw); viewModel.closeOverlay() },
+                            onToggleSchemaSwitch = { sw -> onHapticFeedback?.invoke(); callbacks.onToggleSchemaSwitch?.invoke(sw) },
                         ),
                         modifier = Modifier.fillMaxWidth().fillMaxHeight()
                     )
